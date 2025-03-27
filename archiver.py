@@ -1,4 +1,4 @@
-import sqlite3, json, os
+import sqlite3, os
 from datetime import datetime, timedelta
 from urllib import parse
 import requests
@@ -200,24 +200,19 @@ def download(url, save_path, filename):
     resp = requests.get(url, allow_redirects=True, timeout=10)
     file.write(resp.content)
 
-# Load keys
-KEYS_FILE_PATH = os.getenv('KEYS_FILE_PATH', 'keys.json')
-with open(KEYS_FILE_PATH, 'r', encoding='utf-8') as f:
-    KEYS = json.load(f)
-
 # This is so funny
 NOW = datetime.now()
 
 # Load the client
 client = TrelloClient(
-    api_key=KEYS['TRELLO_API_KEY'],
-    api_secret=KEYS['TRELLO_API_SECRET'],
-    token=KEYS['TRELLO_API_TOKEN']
+    api_key=os.getenv('TRELLO_API_KEY'),
+    api_secret=os.getenv('TRELLO_API_SECRET'),
+    token=os.getenv('TRELLO_API_TOKEN')
 )
 # Get the cards to archive
-ChoppingBlock = client.get_board('5caa4b45fcee638c3f0d5a48')
-Done = ChoppingBlock.get_list('5caa4c1e5e87be26c9b059c8')
-cards = [c for c in Done.list_cards_iter() if
+Board = client.get_board(os.getenv('BOARD_ID'))
+Board_List = Board.get_list(os.getenv('LIST_ID'))
+cards = [c for c in Board_List.list_cards_iter() if
             c.latestCardMove_date is None or
             c.latestCardMove_date.replace(tzinfo=None) < NOW - timedelta(days=30)
         ]
