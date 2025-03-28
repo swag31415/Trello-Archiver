@@ -19,6 +19,22 @@ services:
       - BOARD_ID=***
       - LIST_ID=***
       - REMOVE_CARDS_UPON_COMPLETION=FALSE
+    restart: "no"
 ```
 
 Fill in the keys and ids with your own values and then run `docker compose up`
+
+Also I use a shell script like the following to automate even further
+
+```bash
+#!/bin/bash
+
+# Start the container
+docker compose up
+
+# Wait for container to finish execution
+docker wait trello_archiver
+
+# Stop and remove everything
+docker compose down --rmi all --volumes --remove-orphans
+```
