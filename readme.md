@@ -6,13 +6,19 @@ To use it in it's current state set up a `docker-compose.yml` that looks somethi
 ```yaml
 services:
   trello-archiver:
-    build: ./trello_archiver
+    build: https://github.com/swag31415/Trello-Archiver.git
     container_name: trello_archiver
     volumes:
-      - ./data:/data  # Mounts local 'data' directory for database & keys.json
+      - ./data:/data
     environment:
       - SQLITE_DATABASE_PATH=/data/trello_archive.db
-      - KEYS_FILE_PATH=/data/keys.json
+      - ATTACHMENTS_PATH=/data
+      - TRELLO_API_KEY=***
+      - TRELLO_API_SECRET=***
+      - TRELLO_API_TOKEN=***
+      - BOARD_ID=***
+      - LIST_ID=***
+      - REMOVE_CARDS_UPON_COMPLETION=FALSE
 ```
 
-I know it's rough around the edges now and will likely not work for your setup. I'm improving it day by day.
+Fill in the keys and ids with your own values and then run `docker compose up`

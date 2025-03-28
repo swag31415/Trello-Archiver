@@ -7,120 +7,120 @@ import unicodedata
 import re
 
 class Query:
-    def __init__(self, db_name=""):
-        self.db_name = db_name
-    def __enter__(self):
-        self.conn = sqlite3.connect(self.db_name)
-        self.cursor = self.conn.cursor()
-        return self.conn, self.cursor
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.conn.commit()
-        if exc_type is not None:
-            print(f"An error occurred: {exc_val}")
-            self.conn.rollback()
-        self.conn.close()
+  def __init__(self, db_name=""):
+    self.db_name = db_name
+  def __enter__(self):
+    self.conn = sqlite3.connect(self.db_name)
+    self.cursor = self.conn.cursor()
+    return self.conn, self.cursor
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    self.conn.commit()
+    if exc_type is not None:
+      print(f"An error occurred: {exc_val}")
+      self.conn.rollback()
+    self.conn.close()
 
 SQLITE_DATABASE_PATH = os.getenv('SQLITE_DATABASE_PATH', 'trello_archive.db')
 SQLITE_DATABASE_INIT_SCRIPT = '''
 CREATE TABLE IF NOT EXISTS cards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    create_date TEXT NOT NULL,
-    end_date TEXT NOT NULL,
-    desc TEXT,
-    due_date TEXT,
-    completed BOOLEAN,
-    list TEXT NOT NULL
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  create_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  desc TEXT,
+  due_date TEXT,
+  completed BOOLEAN,
+  list TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS labels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id INTEGER NOT NULL,
-    name TEXT,
-    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id INTEGER NOT NULL,
+  name TEXT,
+  FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS path_taken (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id INTEGER NOT NULL,
-    from_list TEXT NOT NULL,
-    to_list TEXT NOT NULL,
-    time TEXT NOT NULL,
-    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id INTEGER NOT NULL,
+  from_list TEXT NOT NULL,
+  to_list TEXT NOT NULL,
+  time TEXT NOT NULL,
+  FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id INTEGER NOT NULL,
-    text TEXT NOT NULL,
-    time TEXT,
-    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  time TEXT,
+  FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS checklists (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS checklist_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    checklist_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    checked BOOLEAN NOT NULL,
-    FOREIGN KEY (checklist_id) REFERENCES checklists(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  checklist_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  checked BOOLEAN NOT NULL,
+  FOREIGN KEY (checklist_id) REFERENCES checklists(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS attachments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  card_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
 );
 '''
 with Query(SQLITE_DATABASE_PATH) as (con, cur):
-    cur.executescript(SQLITE_DATABASE_INIT_SCRIPT)
+  cur.executescript(SQLITE_DATABASE_INIT_SCRIPT)
 
 def backup_to_sqlite(card, cur):
+  cur.execute("""
+    INSERT INTO cards (name, create_date, end_date, desc, due_date, completed, list)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  """, (
+    card['name'],
+    card['create_date'],
+    card['end_date'],
+    card['desc'] if card['desc'] != '' else None,
+    card['due_date'],
+    card['completed'],
+    card['list']
+  ))
+  card_id = cur.lastrowid
+  # Insert labels
+  for label in card['labels']:
+    cur.execute("INSERT INTO labels (card_id, name) VALUES (?, ?)", (card_id, label))
+  # Insert path taken
+  for path in card['path_taken']:
     cur.execute("""
-        INSERT INTO cards (name, create_date, end_date, desc, due_date, completed, list)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        card['name'],
-        card['create_date'],
-        card['end_date'],
-        card['desc'] if card['desc'] != '' else None,
-        card['due_date'],
-        card['completed'],
-        card['list']
-    ))
-    card_id = cur.lastrowid
-    # Insert labels
-    for label in card['labels']:
-        cur.execute("INSERT INTO labels (card_id, name) VALUES (?, ?)", (card_id, label))
-    # Insert path taken
-    for path in card['path_taken']:
-        cur.execute("""
-            INSERT INTO path_taken (card_id, from_list, to_list, time)
-            VALUES (?, ?, ?, ?)
-        """, (card_id, path['from'], path['to'], path['time']))
-    # Insert comments
-    for comment in card['comments']:
-        cur.execute("""
-            INSERT INTO comments (card_id, text, time)
-            VALUES (?, ?, ?)
-        """, (card_id, comment['text'], comment['time']))
-    # Insert checklists and checklist items
-    for checklist in card['checklists']:
-        cur.execute("INSERT INTO checklists (card_id, name) VALUES (?, ?)", (card_id, checklist['name']))
-        checklist_id = cur.lastrowid
-        for item in checklist['items']:
-            cur.execute("""
-                INSERT INTO checklist_items (checklist_id, name, checked)
-                VALUES (?, ?, ?)
-            """, (checklist_id, item['name'], item['checked']))
-    # Insert attachments
-    for attachment in card['attachments']:
-        cur.execute("""
-            INSERT INTO attachments (card_id, name, url)
-            VALUES (?, ?, ?)
-        """, (card_id, attachment['name'], attachment['url']))
+      INSERT INTO path_taken (card_id, from_list, to_list, time)
+      VALUES (?, ?, ?, ?)
+    """, (card_id, path['from'], path['to'], path['time']))
+  # Insert comments
+  for comment in card['comments']:
+    cur.execute("""
+      INSERT INTO comments (card_id, text, time)
+      VALUES (?, ?, ?)
+    """, (card_id, comment['text'], comment['time']))
+  # Insert checklists and checklist items
+  for checklist in card['checklists']:
+    cur.execute("INSERT INTO checklists (card_id, name) VALUES (?, ?)", (card_id, checklist['name']))
+    checklist_id = cur.lastrowid
+    for item in checklist['items']:
+      cur.execute("""
+        INSERT INTO checklist_items (checklist_id, name, checked)
+        VALUES (?, ?, ?)
+      """, (checklist_id, item['name'], item['checked']))
+  # Insert attachments
+  for attachment in card['attachments']:
+    cur.execute("""
+      INSERT INTO attachments (card_id, name, url)
+      VALUES (?, ?, ?)
+    """, (card_id, attachment['name'], attachment['url']))
 
 def fdate(date):
   """Formats the date"""
@@ -131,11 +131,9 @@ def fdate(date):
     # 'strftime' method or is not a valid date object.
     return None
 
-
 def or_none(val, cond_for_none):
   """just a shorthand"""
   return None if cond_for_none else val
-
 
 def card_to_dict(_card):
   """Turns a trello card with all it's properties into a useful dictionary"""
@@ -205,37 +203,35 @@ NOW = datetime.now()
 
 # Load the client
 client = TrelloClient(
-    api_key=os.getenv('TRELLO_API_KEY'),
-    api_secret=os.getenv('TRELLO_API_SECRET'),
-    token=os.getenv('TRELLO_API_TOKEN')
+  api_key=os.getenv('TRELLO_API_KEY'),
+  api_secret=os.getenv('TRELLO_API_SECRET'),
+  token=os.getenv('TRELLO_API_TOKEN')
 )
 # Get the cards to archive
 Board = client.get_board(os.getenv('BOARD_ID'))
 Board_List = Board.get_list(os.getenv('LIST_ID'))
-cards = [c for c in Board_List.list_cards_iter() if
-            c.latestCardMove_date is None or
-            c.latestCardMove_date.replace(tzinfo=None) < NOW - timedelta(days=30)
-        ]
-
-# Archive!
-arch = [card_to_dict(c) for c in cards]
+attachments = []
+cards = []
 with Query(SQLITE_DATABASE_PATH) as (con, cur):
-    for card in arch:
-        backup_to_sqlite(card, cur)
+  for card in Board_List.list_cards_iter():
+    if card.latestCardMove_date is None or card.latestCardMove_date.replace(tzinfo=None) < NOW - timedelta(days=30):
+      cards.append(card)
+      card_dict = card_to_dict(card)
+      backup_to_sqlite(card_dict, cur)
+      attachments.extend(card_dict['attachments'])
 
 # The attachments
-ATTACHMENT_DIR = NOW.strftime('attach %-m-%-d-%y')
+ATTACHMENT_DIR = os.path.join(os.getenv('ATTACHMENTS_PATH'), NOW.strftime('attach %-m-%-d-%y'))
 if not os.path.isdir(ATTACHMENT_DIR):
-    os.mkdir(ATTACHMENT_DIR)
-ATTACH_COUNT = 0
-for card in arch:
-    for attach in card['attachments']:
-        download(attach['url'], ATTACHMENT_DIR, attach['name'])
-        ATTACH_COUNT += 1
+  os.mkdir(ATTACHMENT_DIR)
+attach_count = 0
+for attach in attachments:
+  download(attach['url'], ATTACHMENT_DIR, attach['name'])
+  attach_count += 1
 
 # Report!
-print(f'Archived {len(arch)} cards and downloaded {ATTACH_COUNT} attachments.')
+print(f'Archived {len(cards)} cards and downloaded {attach_count} attachments.')
 
-# Remove the Archived cards
-# for card in cards:
-#     card.set_closed(True)
+if os.getenv('REMOVE_CARDS_UPON_COMPLETION', 'FALSE') == 'TRUE':
+  for card in cards:
+    card.set_closed(True)
