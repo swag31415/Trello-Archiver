@@ -181,11 +181,11 @@ def slugify(value, allow_unicode=False):
     value = unicodedata.normalize('NFKC', value)
   else:
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
-  value = re.sub(r'[^\w\s-]', '', value.lower())
+  value = re.sub(r'[^\w\s.-]', '', value.lower())
   return re.sub(r'[-\s]+', '-', value).strip('-_')
 
-def download(url, save_path, filename):
-  """downloads a file from a url"""
+def download(url, save_path, filename, client):
+  """downloads a file from a url using TrelloClient authentication"""
   slug = slugify(filename)
   route = f'{save_path}/{slug}'
   # Handle duplicates
@@ -193,10 +193,29 @@ def download(url, save_path, filename):
   while os.path.exists(route):
     route = f'{save_path}/d{dupes}_{slug}'
     dupes += 1
+
+  # Use the same authentication as TrelloClient
+  params = {}
+  headers = {'User-Agent': 'py-trello'}
+
+  if client.oauth is None:
+    # Use API key/token authentication
+    params['key'] = client.api_key
+    params['token'] = client.resource_owner_key
+
   # Download and save the file
   with open(route, 'wb') as file:
-    resp = requests.get(url, allow_redirects=True, timeout=10)
-    file.write(resp.content)
+    if client.oauth:
+      # Use OAuth authentication
+      resp = requests.get(url, auth=client.oauth, headers=headers, proxies=client.proxies, allow_redirects=True, timeout=10)
+    else:
+      # Use key/token authentication
+      resp = requests.get(url, params=params, headers=headers, proxies=client.proxies, allow_redirects=True, timeout=10)
+
+    if resp.status_code == 200:
+      file.write(resp.content)
+    else:
+      print(f"Failed to download {filename}: HTTP {resp.status_code} - {resp.text}")
 
 # This is so funny
 NOW = datetime.now()
@@ -226,7 +245,7 @@ if not os.path.isdir(ATTACHMENT_DIR):
   os.mkdir(ATTACHMENT_DIR)
 attach_count = 0
 for attach in attachments:
-  download(attach['url'], ATTACHMENT_DIR, attach['name'])
+  download(attach['url'], ATTACHMENT_DIR, attach['name'], client)
   attach_count += 1
 
 # Report!
