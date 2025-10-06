@@ -7,12 +7,22 @@ WORKDIR /app
 # Install required system dependencies
 RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
-# Copy the script into the container
-COPY archiver.py /app/
-
-# Install Python dependencies
+# Copy requirements and install Python dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Set the default command to run the script
-CMD ["python", "/app/archiver.py"]
+# Copy the archiver script
+COPY archiver.py /app/
+
+# Copy the trello-ui directory
+COPY trello-ui /app/trello-ui
+
+# Expose port for web UI
+EXPOSE 8050
+
+# Copy startup script
+COPY startup.sh /app/
+RUN chmod +x /app/startup.sh
+
+# Run the startup script
+CMD ["/app/startup.sh"]
