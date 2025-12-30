@@ -45,69 +45,12 @@ This project consists of two integrated components:
 - Attachments list
 - Movement history (journey visualization)
 
-## Quick Start with Docker
+## Quick Start with uv
 
 ### Prerequisites
-- Docker and Docker Compose
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
 - Trello API credentials (API key, secret, and token)
 - Your Trello Board ID and List ID for archiving
-
-### Docker Setup
-
-1. Create a `docker-compose.yml` file:
-
-```yaml
-services:
-  trello-archiver:
-    build: https://github.com/swag31415/Trello-Archiver.git
-    container_name: trello_archiver
-    ports:
-      - "8050:8050"
-    volumes:
-      - ./data:/data
-    environment:
-      - SQLITE_DATABASE_PATH=/data/trello_archive.db
-      - ATTACHMENTS_PATH=/data
-      - TRELLO_API_KEY=***
-      - TRELLO_API_SECRET=***
-      - TRELLO_API_TOKEN=***
-      - BOARD_ID=***
-      - LIST_ID=***
-      - REMOVE_CARDS_UPON_COMPLETION=FALSE
-    restart: "no"
-```
-
-2. Fill in your Trello credentials and IDs
-
-3. Run:
-```bash
-docker compose up
-```
-
-4. Access the web UI at `http://localhost:8050`
-
-### Automation Script
-
-For automated archiving, use this shell script:
-
-```bash
-#!/bin/bash
-
-# Start the container
-docker compose up
-
-# Wait for container to finish execution
-docker wait trello_archiver
-
-# Stop and remove everything
-docker compose down --rmi all --volumes --remove-orphans
-```
-
-## Local Development
-
-### Prerequisites
-- Python 3.8 or higher
-- Virtual environment (recommended)
 
 ### Setup
 
@@ -117,63 +60,77 @@ docker compose down --rmi all --volumes --remove-orphans
    cd Trello-Archiver
    ```
 
-2. **Create and activate virtual environment**:
+2. **Configure your credentials** in `archive.sh`:
+   - Update the Trello API credentials (`TRELLO_API_KEY`, `TRELLO_API_SECRET`, `TRELLO_API_TOKEN`)
+   - Set your board and list IDs (`BOARD_ID`, `LIST_ID`)
+   - Adjust `REMOVE_CARDS_UPON_COMPLETION` as needed
+
+3. **Run the archiver**:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ./archive.sh
    ```
 
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+   This will:
+   - Archive cards from your specified Trello list (30+ days old)
+   - Download all attachments to `./data/attach [date]`
+   - Launch the web UI at `http://localhost:8050`
 
-4. **Set up environment variables** (or use a `.env` file):
+That's it! uv handles all dependency installation automatically.
+
+## Manual Development
+
+### Running Components Separately
+
+If you want to run the archiver or UI separately:
+
+1. **Set up environment variables**:
    ```bash
-   export SQLITE_DATABASE_PATH=/path/to/trello_archive.db
+   export SQLITE_DATABASE_PATH=./data/trello_archive.db
+   export ATTACHMENTS_PATH=./data
    export TRELLO_API_KEY=your_key
    export TRELLO_API_SECRET=your_secret
    export TRELLO_API_TOKEN=your_token
    export BOARD_ID=your_board_id
    export LIST_ID=your_list_id
+   export REMOVE_CARDS_UPON_COMPLETION=FALSE
    ```
 
-5. **Run the archiver**:
+2. **Run the archiver only**:
    ```bash
-   python archiver.py
+   uv run archiver.py
    ```
 
-6. **Run the web UI**:
+3. **Run the web UI only**:
    ```bash
-   python trello-ui/app.py
+   cd trello-ui
+   uv run app.py
    ```
 
-7. **Access the interface**: `http://127.0.0.1:8050`
+4. **Access the interface**: `http://127.0.0.1:8050`
 
 ## Project Structure
 
 ```
 Trello-Archiver/
 ├── archiver.py            # Main archiving script
-├── Dockerfile             # Docker configuration
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
+├── pyproject.toml         # uv project configuration
+├── README.md              # This file
 │
-└── trello-ui/            # Web interface
-    ├── app.py            # Main application entry point
-    ├── assets/           # Static assets (CSS, images)
-    ├── components/       # Reusable UI components
-    │   ├── charts.py     # Chart creation functions
-    │   ├── sankey.py     # Sankey diagram components
-    │   ├── cards.py      # Card display components
-    │   └── search.py     # Search and filter components
-    ├── database/         # Database layer
-    │   ├── connection.py # Database connection management
-    │   └── queries.py    # SQL query functions
-    ├── pages/            # Page layouts
-    │   ├── dashboard.py  # Analytics dashboard
-    │   └── search_page.py# Search interface
-    └── utils/            # Utility functions
+└── trello-ui/             # Web interface
+    ├── app.py             # Main application entry point
+    ├── assets/            # Static assets (CSS, images)
+    ├── components/        # Reusable UI components
+    │   ├── charts.py      # Chart creation functions
+    │   ├── sankey.py      # Sankey diagram components
+    │   ├── cards.py       # Card display components
+    │   └── search.py      # Search and filter components
+    ├── database/          # Database layer
+    │   ├── connection.py  # Database connection management
+    │   └── queries.py     # SQL query functions
+    ├── pages/             # Page layouts
+    │   ├── dashboard.py   # Analytics dashboard
+    │   └── search_page.py # Search interface
+    └── utils/             # Utility functions
 ```
 
 ## Database Schema
@@ -233,11 +190,6 @@ DATABASE_PATH = os.getenv('SQLITE_DATABASE_PATH', '/data/trello_archive.db')
 
 ## Troubleshooting
 
-### Docker Issues
-- Ensure Docker is running
-- Check container logs: `docker logs trello_archiver`
-- Verify volume mounts are correct
-
 ### Database Connection
 - Verify the database file path is correct
 - Check file permissions
@@ -256,13 +208,13 @@ DATABASE_PATH = os.getenv('SQLITE_DATABASE_PATH', '/data/trello_archive.db')
 ## Technologies Used
 
 - **Python**: Core application language
+- **uv**: Fast Python package manager
 - **Dash**: Web framework for analytical applications
 - **Plotly**: Interactive charting and visualization
 - **Dash Bootstrap Components**: UI components
 - **Pandas**: Data manipulation and analysis
 - **SQLite**: Local database
 - **py-trello**: Trello API client
-- **Docker**: Containerization
 
 ## License
 
